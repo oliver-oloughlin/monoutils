@@ -2,5 +2,8 @@
   "lock": false,
   "fmt": {
     "semiColons": false
+  },
+  "tasks": {
+    "test": "deno fmt && deno check ./mod.ts && deno lint"
   }
 }
