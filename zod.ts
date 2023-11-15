@@ -27,7 +27,7 @@ export function safeCoerceObject<T extends z.ZodObject<z.ZodRawShape>>(
     .map(([key, value]) => {
       const valueSchema = schema.shape[key]
 
-      let parsed = valueSchema.safeParse(value)
+      let parsed = valueSchema?.safeParse(value) ?? z.any().safeParse(value)
 
       if (!parsed.success) {
         parsed = typeof value === "object" && !(value instanceof Date)
