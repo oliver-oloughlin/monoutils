@@ -1,51 +1,71 @@
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts"
 
 /**
- * Parse search parameters from a url using a zod schema.
+ * Coerce and parse object data.
  *
- * @param url
+ * @param data
  * @param schema
  * @returns
  */
-export function safeParseSearchParams<T extends z.ZodObject<z.ZodRawShape>>(
-  url: string | URL,
+export function safeCoerceObject<T extends z.ZodObject<z.ZodRawShape>>(
+  data: unknown,
   schema: T,
-): z.SafeParseSuccess<T> | { success: false } {
-  const searchParams = Object.fromEntries(new URL(url).searchParams.entries())
+): z.SafeParseError<unknown> | z.SafeParseSuccess<z.TypeOf<T>> {
+  if (typeof data !== "object") {
+    throw Error(`Expected data of type object: Received ${typeof data}`)
+  }
 
-  const coercedEntries = Object
-    .entries(searchParams)
-    .map(([key, value]) =>
-      [key, safeCoercePrimitive(value, schema.shape[key])] as const
+  if (schema._def.typeName !== "ZodObject") {
+    throw Error(
+      `Expected schema of type ZodObject: Received ${schema._def.typeName}`,
     )
-    .map(([key, value]) => [key, value.success ? value.data : null] as const)
-
-  if (coercedEntries.some(([_, value]) => value === null)) {
-    return {
-      success: false,
-    }
   }
 
-  const coercedSearchParams = Object.fromEntries(coercedEntries)
+  const entries = Object.entries(data as object)
 
-  return schema.safeParse(coercedSearchParams) as z.SafeParseSuccess<T> | {
-    success: false
+  const parsedEntries = entries
+    .map(([key, value]) => {
+      const valueSchema = schema.shape[key]
+
+      let parsed = valueSchema.safeParse(value)
+
+      if (!parsed.success) {
+        parsed = typeof value === "object" && !(value instanceof Date)
+          ? safeCoerceObject(value, valueSchema as z.ZodObject<z.ZodRawShape>)
+          : safeCoercePrimitive(value, valueSchema)
+      }
+
+      return [key, parsed] as const
+    })
+
+  const entry = parsedEntries.find(([_, parsed]) => !parsed.success)
+
+  if (entry) {
+    const error = entry[1] as z.SafeParseError<unknown>
+    return error
   }
+
+  const coercedSearchParams = Object.fromEntries(
+    parsedEntries.map((
+      [key, parsed],
+    ) => [key, parsed.success ? parsed.data : null]),
+  )
+  return schema.safeParse(coercedSearchParams)
 }
 
 /**
- * Coerce and parse a Zod schema of any primitive type.
+ * Coerce and parse primitive data.
  *
- * @param value - Value to be coerced and parsed according to schema.
+ * @param data - Data to be coerced and parsed according to schema.
  * @param schema - Primitive Zod schema.
  * @returns A parse result or error.
  */
 export function safeCoercePrimitive<
   const T extends number | boolean | bigint | string | Date,
 >(
-  value: unknown,
+  data: unknown,
   schema: z.ZodType<T>,
-): z.SafeParseSuccess<T> | { success: false } {
+): z.SafeParseReturnType<unknown, T> {
   // deno-lint-ignore no-explicit-any
   const schemaType = (schema._def as any).typeName
 
@@ -61,15 +81,15 @@ export function safeCoercePrimitive<
     ? z.coerce.date()
     : null
 
-  // If no coerce schema selected, return error
+  // If no coerce schema selected, throw error
   if (!coerceSchema) {
-    return {
-      success: false,
-    }
+    throw new Error(
+      `Expected schema type of (ZodNumber, ZodBoolean, ZodBigInt, ZodString, ZodDate): Received ${schemaType}`,
+    )
   }
 
   // Parse using coerce schema
-  const coerceParsed = coerceSchema.safeParse(value)
+  const coerceParsed = coerceSchema.safeParse(data)
 
   // Return error if not successful
   if (!coerceParsed.success) {

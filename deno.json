@@ -4,6 +4,6 @@
     "semiColons": false
   },
   "tasks": {
-    "test": "deno fmt && deno check ./mod.ts && deno lint"
+    "test": "deno fmt && deno check --unstable ./_index.ts && deno lint --unstable && deno test -A --unstable"
   }
 }
