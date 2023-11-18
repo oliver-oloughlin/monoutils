@@ -31,13 +31,13 @@ jobs:
           deno-version: v1.x
 
       - name: Check Types
-        run: deno check --unstable _index.ts
+        run: deno task check
 
       - name: Check formatting
         run: deno fmt --check
 
       - name: Run linter
-        run: deno lint --unstable
+        run: deno lint
 
       - name: Run Tests
-        run: deno test -A --unstable
+        run: deno task test
