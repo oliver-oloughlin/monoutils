@@ -4,7 +4,7 @@
     "semiColons": false
   },
   "tasks": {
-    "check": "deno check --unstable crypto.ts json.ts math.ts promise.ts response.ts sse.ts time.ts zod.ts",
+    "check": "deno check --unstable crypto.ts json.ts math.ts promise.ts response.ts sse.ts time.ts zod.ts object.ts",
     "test": "deno test -A --unstable",
     "prep": "deno task check && deno lint && deno fmt && deno task test"
   }
