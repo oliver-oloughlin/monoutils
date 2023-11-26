@@ -1,3 +1,5 @@
+import { isObject } from "./object.ts"
+
 export type JSONError = {
   message: string
   name: string
@@ -6,6 +8,7 @@ export type JSONError = {
 }
 
 export enum TypeKey {
+  Undefined = "__undefined__",
   BigInt = "__bigint__",
   KvU64 = "__kvu64__",
   Int8Array = "__int8array__",
@@ -29,12 +32,47 @@ export enum TypeKey {
   NaN = "__nan__",
 }
 
-export function stringify(value: unknown, space?: number | string) {
-  return JSON.stringify(value, replacer, space)
+/**
+ * Serialize a value to Uint8Array.
+ *
+ * @param value . Value to be serialized.
+ * @returns Serialized value.
+ */
+export function serialize(value: unknown) {
+  const str = stringify(value)
+  return new TextEncoder().encode(str)
 }
 
+/**
+ * Deserialize a value encoded as Uint8Array.
+ *
+ * @param value - Value to be deserialize.
+ * @returns Deserialized value.
+ */
+export function deserialize<T>(value: Uint8Array) {
+  const str = new TextDecoder().decode(value)
+  return parse<T>(str)
+}
+
+/**
+ * Convert a value to a JSON string.
+ *
+ * @param value - Value to be stringified.
+ * @param space
+ * @returns
+ */
+export function stringify(value: unknown, space?: number | string) {
+  return JSON.stringify(_replacer(value), replacer, space)
+}
+
+/**
+ * Parse a value from a JSON string.
+ *
+ * @param value - JSON string to be parsed.
+ * @returns
+ */
 export function parse<T>(value: string) {
-  return JSON.parse(value, reviver) as T
+  return postReviver(JSON.parse(value, reviver)) as T
 }
 
 /**
@@ -44,7 +82,7 @@ export function parse<T>(value: string) {
  * @param value
  * @returns
  */
-export function replacer(_key: string, value: unknown) {
+function replacer(_key: string, value: unknown) {
   return _replacer(value)
 }
 
@@ -55,7 +93,7 @@ export function replacer(_key: string, value: unknown) {
  * @param value
  * @returns
  */
-export function reviver(_key: string, value: unknown) {
+function reviver(_key: string, value: unknown) {
   return _reviver(value)
 }
 
@@ -69,13 +107,19 @@ function _replacer(value: unknown): unknown {
   // Return value if primitive, function or symbol
   if (
     value === null ||
-    value === undefined ||
     typeof value === "string" ||
     typeof value === "number" ||
     typeof value === "function" ||
     typeof value === "symbol"
   ) {
     return value
+  }
+
+  // Undefined
+  if (value === undefined) {
+    return {
+      [TypeKey.Undefined]: false,
+    }
   }
 
   // NaN
@@ -238,7 +282,7 @@ function _replacer(value: unknown): unknown {
   }
 
   // Clone value to handle special cases
-  const clone = structuredClone(value)
+  const clone = structuredClone(value) as Record<string, unknown>
   for (const [k, v] of Object.entries(value)) {
     if (v instanceof Date) {
       clone[k] = _replacer(v)
@@ -382,6 +426,38 @@ function _reviver(value: unknown): unknown {
   }
 
   // Return value
+  return value
+}
+
+/**
+ * Reviver post-parse.
+ *
+ * @param value
+ * @returns
+ */
+function postReviver(value: unknown): unknown {
+  if (
+    value === undefined ||
+    value === null ||
+    typeof value !== "object"
+  ) {
+    return value
+  }
+
+  if (TypeKey.Undefined in value) {
+    return undefined
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((v) => postReviver(v))
+  }
+
+  if (isObject(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, postReviver(v)]),
+    )
+  }
+
   return value
 }
 
